@@ -1,6 +1,6 @@
 # Robotic Arm — INFO-I341
 
-A 5-servo robotic arm controlled by a joystick, built for **INFO-I341: PROTOTYPING WITH ARDUINO TOOLS BY Yashna Pandugala & Vansh Pandita ** at Indiana University Bloomington.
+A 5-servo robotic arm controlled by a joystick, built for **INFO-I341: PROTOTYPING WITH ARDUINO TOOLS by Yashna Pandugala & Vansh Pandita ** at Indiana University Bloomington.
 
 ## Overview
 
