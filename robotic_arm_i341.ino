@@ -1,9 +1,10 @@
 #include <Servo.h>
+#include <math.h>
 
 // Define all 5 servos
 Servo servoBase;
-Servo servoShoulderFront;  // Front tilt servo (top circled)
-Servo servoShoulderBack;   // Back tilt servo (bottom circled)
+Servo servoShoulderFront;
+Servo servoShoulderBack;
 Servo servoElbow;
 Servo servoGripper;
 
@@ -19,22 +20,27 @@ const int PIN_SERVO_ELBOW          = 5;
 const int PIN_SERVO_GRIPPER        = 11;
 
 // Control parameters
-const int DEADZONE = 30;
-const int SPEED    = 2;
-const int ELBOW_SPEED = 1;  // Separate speed control for elbow
+const int DEADZONE    = 30;
+const int SPEED       = 2;
+const int ELBOW_SPEED = 2;   // bumped to match shoulder so elbow keeps up
 
-// Gripper positions (adjust these after testing)
-const int GRIPPER_OPEN   = 10;   // Adjust based on your gripper
-const int GRIPPER_CLOSED = 73;   // Adjust based on your gripper
+// Gravity compensation — when the shoulder is horizontal the elbow
+// needs extra angle to hold the top up against gravity.
+// Increase GRAVITY_OFFSET if the top still droops; decrease if it overcorrects.
+const int GRAVITY_OFFSET = 20;
 
-// Elbow range — clamped to 45 degrees (from 45 to 90)
-const int ELBOW_MIN = 45;   // lowest position
-const int ELBOW_MAX = 90;   // highest position (45° range total)
+// Gripper positions (adjust after testing)
+const int GRIPPER_OPEN   = 10;
+const int GRIPPER_CLOSED = 73;
+
+// Elbow range — expanded to give gravity compensation room to work
+const int ELBOW_MIN = 30;
+const int ELBOW_MAX = 110;
 
 // Servo positions
 int posBase     = 90;
 int posShoulder = 90;
-int posElbow    = 45;   // starts at the minimum
+int posElbow    = 45;
 
 // Gripper state
 bool gripperClosed = false;
@@ -49,14 +55,14 @@ void setup() {
 
   servoBase.write(posBase);
   servoShoulderFront.write(posShoulder);
-  servoShoulderBack.write(180 - posShoulder);  // Inverted
-  servoElbow.write(posElbow);
+  servoShoulderBack.write(180 - posShoulder);
+  servoElbow.write(applyGravityComp(posElbow, posShoulder));
   servoGripper.write(GRIPPER_OPEN);
 
   pinMode(PIN_JOY_BTN, INPUT_PULLUP);
 
   Serial.begin(9600);
-  Serial.println("5-Servo Arm Ready - Elbow clamped to 45°");
+  Serial.println("5-Servo Arm Ready — gravity compensation ON");
 }
 
 void loop() {
@@ -75,18 +81,18 @@ void loop() {
   int offsetY = rawY - 512;
 
   if (abs(offsetY) > DEADZONE) {
-    // Both shoulder servos move together (one inverted)
     if (offsetY > 0) posShoulder = min(posShoulder + SPEED, 180);
     else             posShoulder = max(posShoulder - SPEED, 0);
 
     servoShoulderFront.write(posShoulder);
-    servoShoulderBack.write(180 - posShoulder);  // Inverted for mechanical sync
+    servoShoulderBack.write(180 - posShoulder);
 
-    // Elbow coordinated movement — clamped to ELBOW_MIN / ELBOW_MAX
     if (offsetY > 0) posElbow = min(posElbow + ELBOW_SPEED, ELBOW_MAX);
     else             posElbow = max(posElbow - ELBOW_SPEED, ELBOW_MIN);
-    servoElbow.write(posElbow);
   }
+
+  // Always write elbow with gravity compensation applied
+  servoElbow.write(applyGravityComp(posElbow, posShoulder));
 
   // ===== GRIPPER TOGGLE (Button) =====
   bool currentBtnState = digitalRead(PIN_JOY_BTN);
@@ -98,9 +104,19 @@ void loop() {
     Serial.print(">>> Gripper: ");
     Serial.println(gripperClosed ? "CLOSED" : "OPEN");
 
-    delay(200);  // Debounce delay
+    delay(200);
   }
   lastBtnState = currentBtnState;
 
   delay(15);
+}
+
+// Adds a gravity compensation offset to the elbow angle.
+// cos() peaks at 1 when the shoulder is horizontal (90°) and
+// falls to 0 when the arm points straight up or down — which
+// matches how gravity's effect on the joint actually behaves.
+int applyGravityComp(int elbowAngle, int shoulderAngle) {
+  float rad     = (shoulderAngle - 90.0) * PI / 180.0;
+  int   gravComp = (int)(GRAVITY_OFFSET * cos(rad));
+  return constrain(elbowAngle + gravComp, ELBOW_MIN, ELBOW_MAX);
 }
